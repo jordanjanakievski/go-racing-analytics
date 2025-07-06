@@ -2,12 +2,9 @@ go-racing-analytics/backend/handlers/handlers.go
 package handlers
 
 import (
-	"encoding/json"
-	"net/http"
 	"strings"
 
-	"github.com/gorilla/mux"
-	"go-racing-analytics/backend/db"
+	"github.com/gin-gonic/gin"
 )
 
 // Handler struct holds dependencies for HTTP handlers
@@ -38,40 +35,60 @@ func NewHandler(dbProvider func() DB) *Handler {
 }
 
 // GET /api/drivers
-func (h *Handler) GetDrivers(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement logic to fetch drivers from DuckDB
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	json.NewEncoder(w).Encode(map[string]string{"error": "Not implemented"})
+// Returns all unique driver codes for the given session (required: ?session=Q or ?session=R)
+func (h *Handler) GetDrivers(c *gin.Context) {
+	session := ParseSessionParamGin(c)
+	if session == "" {
+		c.JSON(400, gin.H{"error": "Missing or empty session parameter"})
+		return
+	}
+
+	db := h.DBProvider()
+	rows, err := db.Query("SELECT DISTINCT driver FROM telemetry WHERE session = ?", session)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to query drivers"})
+		return
+	}
+	defer rows.Close()
+
+	var drivers []string
+	for rows.Next() {
+		var driver string
+		if err := rows.Scan(&driver); err != nil {
+			c.JSON(500, gin.H{"error": "Failed to scan driver"})
+			return
+		}
+		drivers = append(drivers, driver)
+	}
+	if err := rows.Err(); err != nil {
+		c.JSON(500, gin.H{"error": "Error reading drivers"})
+		return
+	}
+
+	c.JSON(200, drivers)
 }
 
 // GET /api/laps?drivers=VER,HAM&session=R
-func (h *Handler) GetLaps(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetLaps(c *gin.Context) {
 	// TODO: Parse drivers and session, fetch laps from DuckDB
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	json.NewEncoder(w).Encode(map[string]string{"error": "Not implemented"})
+	c.JSON(501, gin.H{"error": "Not implemented"})
 }
 
 // GET /api/telemetry?drivers=VER,HAM&lap_number=5&session=R
-func (h *Handler) GetTelemetry(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetTelemetry(c *gin.Context) {
 	// TODO: Parse drivers, lap_number, session, fetch telemetry from DuckDB
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	json.NewEncoder(w).Encode(map[string]string{"error": "Not implemented"})
+	c.JSON(501, gin.H{"error": "Not implemented"})
 }
 
 // GET /api/summary?drivers=VER,HAM&session=Q
-func (h *Handler) GetSummary(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetSummary(c *gin.Context) {
 	// TODO: Parse drivers and session, fetch summary stats from DuckDB
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	json.NewEncoder(w).Encode(map[string]string{"error": "Not implemented"})
+	c.JSON(501, gin.H{"error": "Not implemented"})
 }
 
-// Utility: Parse comma-separated drivers from query param
-func ParseDriversParam(r *http.Request) []string {
-	drivers := r.URL.Query().Get("drivers")
+// Utility: Parse comma-separated drivers from Gin context
+func ParseDriversParamGin(c *gin.Context) []string {
+	drivers := c.Query("drivers")
 	if drivers == "" {
 		return nil
 	}
@@ -82,16 +99,18 @@ func ParseDriversParam(r *http.Request) []string {
 	return parts
 }
 
-// Utility: Parse session param
-func ParseSessionParam(r *http.Request) string {
-	return strings.TrimSpace(r.URL.Query().Get("session"))
+// Utility: Parse session param from Gin context
+func ParseSessionParamGin(c *gin.Context) string {
+	return strings.TrimSpace(c.Query("session"))
 }
 
-// RegisterRoutes attaches handlers to the router
-func RegisterRoutes(router *mux.Router, handler *Handler) {
-	api := router.PathPrefix("/api").Subrouter()
-	api.HandleFunc("/drivers", handler.GetDrivers).Methods("GET")
-	api.HandleFunc("/laps", handler.GetLaps).Methods("GET")
-	api.HandleFunc("/telemetry", handler.GetTelemetry).Methods("GET")
-	api.HandleFunc("/summary", handler.GetSummary).Methods("GET")
+// RegisterRoutesGin attaches handlers to the Gin router
+func RegisterRoutesGin(r *gin.Engine, handler *Handler) {
+	api := r.Group("/api")
+	{
+		api.GET("/drivers", handler.GetDrivers)
+		api.GET("/laps", handler.GetLaps)
+		api.GET("/telemetry", handler.GetTelemetry)
+		api.GET("/summary", handler.GetSummary)
+	}
 }

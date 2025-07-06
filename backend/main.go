@@ -3,33 +3,33 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"os"
 
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
+	"github.com/gin-contrib/cors"
 
 	"go-racing-analytics/backend/db"
 	"go-racing-analytics/backend/handlers"
 )
 
 func main() {
-	// Set up router
-	router := mux.NewRouter()
+	// Set Gin to release mode for production, or use gin.Default() for logging/recovery in dev
+	r := gin.Default()
+
+	// CORS middleware: allow all origins for development
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
+		AllowHeaders:     []string{"Content-Type", "Authorization"},
+		AllowCredentials: true,
+	}))
 
 	// Initialize DuckDB connection
 	db.InitDuckDB()
 
 	// Register API handlers
 	handler := handlers.NewHandler(db.GetDB)
-	handlers.RegisterRoutes(router, handler)
-
-	// CORS setup: allow all origins for development
-	corsHandler := handlers.CORS(
-		handlers.AllowedOrigins([]string{"*"}),
-		handlers.AllowedMethods([]string{"GET", "POST", "OPTIONS"}),
-		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
-	)(router)
+	handlers.RegisterRoutesGin(r, handler)
 
 	port := "8080"
 	if p := os.Getenv("PORT"); p != "" {
@@ -37,7 +37,7 @@ func main() {
 	}
 
 	log.Printf("Go Racing Analytics API server running on port %s", port)
-	if err := http.ListenAndServe(":"+port, corsHandler); err != nil {
+	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
