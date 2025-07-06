@@ -2,9 +2,11 @@ go-racing-analytics/backend/handlers/handlers.go
 package handlers
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"go-racing-analytics/backend/models"
 )
 
 // Handler struct holds dependencies for HTTP handlers
@@ -70,8 +72,65 @@ func (h *Handler) GetDrivers(c *gin.Context) {
 
 // GET /api/laps?drivers=VER,HAM&session=R
 func (h *Handler) GetLaps(c *gin.Context) {
-	// TODO: Parse drivers and session, fetch laps from DuckDB
-	c.JSON(501, gin.H{"error": "Not implemented"})
+	session := ParseSessionParamGin(c)
+	if session == "" {
+		c.JSON(400, gin.H{"error": "Missing or empty session parameter"})
+		return
+	}
+
+	drivers := ParseDriversParamGin(c)
+	if len(drivers) == 0 {
+		c.JSON(400, gin.H{"error": "Missing or empty drivers parameter"})
+		return
+	}
+
+	// Build the query with placeholders for drivers
+	placeholders := make([]string, len(drivers))
+	args := make([]interface{}, 0, len(drivers)+1)
+
+	for i := range drivers {
+		placeholders[i] = "?"
+		args = append(args, drivers[i])
+	}
+	args = append(args, session)
+
+	query := fmt.Sprintf(`
+		SELECT lt.driver, lt.session, lt.lap_number, lt.lap_time_seconds, COALESCE(t.compound, '') as compound
+		FROM lap_times lt
+		LEFT JOIN tires t ON lt.driver = t.driver AND lt.session = t.session AND lt.lap_number = t.lap_number
+		WHERE lt.driver IN (%s) AND lt.session = ?
+		ORDER BY lt.driver, lt.lap_number
+	`, strings.Join(placeholders, ","))
+
+	db := h.DBProvider()
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to query laps"})
+		return
+	}
+	defer rows.Close()
+
+	// Group laps by driver
+	result := make(map[string][]models.Lap)
+	for rows.Next() {
+		var lap models.Lap
+		if err := rows.Scan(&lap.Driver, &lap.Session, &lap.LapNumber, &lap.LapTime, &lap.Compound); err != nil {
+			c.JSON(500, gin.H{"error": "Failed to scan lap data"})
+			return
+		}
+
+		if result[lap.Driver] == nil {
+			result[lap.Driver] = make([]models.Lap, 0)
+		}
+		result[lap.Driver] = append(result[lap.Driver], lap)
+	}
+
+	if err := rows.Err(); err != nil {
+		c.JSON(500, gin.H{"error": "Error reading lap data"})
+		return
+	}
+
+	c.JSON(200, result)
 }
 
 // GET /api/telemetry?drivers=VER,HAM&lap_number=5&session=R
