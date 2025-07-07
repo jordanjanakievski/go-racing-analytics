@@ -29,11 +29,10 @@ def create_tables(conn):
     # Create telemetry table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS telemetry (
-            id INTEGER PRIMARY KEY,
             driver TEXT,
             session TEXT,
             lap_number INTEGER,
-            timestamp TIMESTAMP,
+            timestamp_seconds DOUBLE,
             speed DOUBLE,
             rpm DOUBLE,
             gear INTEGER,
@@ -44,7 +43,6 @@ def create_tables(conn):
     # Create lap_times table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS lap_times (
-            id INTEGER PRIMARY KEY,
             driver TEXT,
             session TEXT,
             lap_number INTEGER,
@@ -55,7 +53,6 @@ def create_tables(conn):
     # Create tires table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS tires (
-            id INTEGER PRIMARY KEY,
             driver TEXT,
             session TEXT,
             lap_number INTEGER,
@@ -125,7 +122,7 @@ def fetch_and_populate_session(year, event, session_identifier):
 
             try:
                 # Get driver's laps
-                driver_laps = session.laps.pick_driver(driver)
+                driver_laps = session.laps.pick_drivers(driver)
 
                 if driver_laps.empty:
                     print(f"  No laps found for driver {driver}")
@@ -167,14 +164,18 @@ def fetch_and_populate_session(year, event, session_identifier):
                             telemetry_sample = telemetry.iloc[::10]
 
                             for tel_idx, tel in telemetry_sample.iterrows():
-                                # Convert timestamp to datetime
-                                timestamp = session.session_start_time + tel['Time']
+                                # Use relative time in seconds from session start
+                                try:
+                                    time_seconds = tel['Time'].total_seconds()
+                                except (AttributeError, TypeError):
+                                    # Skip this telemetry point if we can't get the time
+                                    continue
 
                                 telemetry_data.append({
                                     'driver': driver,
                                     'session': session_identifier,
                                     'lap_number': int(lap_number),
-                                    'timestamp': timestamp,
+                                    'timestamp_seconds': time_seconds,
                                     'speed': float(tel['Speed']) if not pd.isna(tel['Speed']) else 0.0,
                                     'rpm': float(tel['RPM']) if not pd.isna(tel['RPM']) else 0.0,
                                     'gear': int(tel['nGear']) if not pd.isna(tel['nGear']) else 0,
@@ -204,7 +205,7 @@ def fetch_and_populate_session(year, event, session_identifier):
         if telemetry_data:
             print(f"Inserting {len(telemetry_data)} telemetry records...")
             telemetry_df = pd.DataFrame(telemetry_data)
-            conn.execute("INSERT INTO telemetry (driver, session, lap_number, timestamp, speed, rpm, gear, throttle) SELECT * FROM telemetry_df")
+            conn.execute("INSERT INTO telemetry (driver, session, lap_number, timestamp_seconds, speed, rpm, gear, throttle) SELECT * FROM telemetry_df")
 
         conn.close()
 
