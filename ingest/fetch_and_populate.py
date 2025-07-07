@@ -26,9 +26,21 @@ def create_tables(conn):
     """Create DuckDB tables if they don't exist."""
     print("Creating tables if they don't exist...")
 
+    # Create races table
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS races (
+            race_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            circuit TEXT NOT NULL,
+            date DATE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     # Create telemetry table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS telemetry (
+            race_id TEXT NOT NULL,
             driver TEXT,
             session TEXT,
             lap_number INTEGER,
@@ -36,41 +48,46 @@ def create_tables(conn):
             speed DOUBLE,
             rpm DOUBLE,
             gear INTEGER,
-            throttle DOUBLE
+            throttle DOUBLE,
+            FOREIGN KEY (race_id) REFERENCES races(race_id)
         )
     """)
 
     # Create lap_times table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS lap_times (
+            race_id TEXT NOT NULL,
             driver TEXT,
             session TEXT,
             lap_number INTEGER,
-            lap_time_seconds DOUBLE
+            lap_time_seconds DOUBLE,
+            FOREIGN KEY (race_id) REFERENCES races(race_id)
         )
     """)
 
     # Create tires table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS tires (
+            race_id TEXT NOT NULL,
             driver TEXT,
             session TEXT,
             lap_number INTEGER,
-            compound TEXT
+            compound TEXT,
+            FOREIGN KEY (race_id) REFERENCES races(race_id)
         )
     """)
 
     print("Tables created successfully.")
 
-def clear_existing_data(conn, session_name):
-    """Clear existing data for the session to avoid duplicates."""
-    print(f"Clearing existing data for session '{session_name}'...")
+def clear_existing_data(conn, race_id, session_name):
+    """Clear existing data for the race and session to avoid duplicates."""
+    print(f"Clearing existing data for race '{race_id}', session '{session_name}'...")
 
-    conn.execute("DELETE FROM telemetry WHERE session = ?", [session_name])
-    conn.execute("DELETE FROM lap_times WHERE session = ?", [session_name])
-    conn.execute("DELETE FROM tires WHERE session = ?", [session_name])
+    conn.execute("DELETE FROM telemetry WHERE race_id = ? AND session = ?", [race_id, session_name])
+    conn.execute("DELETE FROM lap_times WHERE race_id = ? AND session = ?", [race_id, session_name])
+    conn.execute("DELETE FROM tires WHERE race_id = ? AND session = ?", [race_id, session_name])
 
-    print(f"Cleared existing data for session '{session_name}'.")
+    print(f"Cleared existing data for race '{race_id}', session '{session_name}'.")
 
 def fetch_and_populate_session(year, event, session_identifier):
     """Fetch F1 session data and populate DuckDB."""
@@ -109,8 +126,17 @@ def fetch_and_populate_session(year, event, session_identifier):
         # Create tables
         create_tables(conn)
 
-        # Clear existing data for this session
-        clear_existing_data(conn, session_identifier)
+        # Generate race ID and ensure race exists
+        race_id = f"{year}-{event.lower()}"
+
+        # Insert or update race information
+        conn.execute("""
+            INSERT OR REPLACE INTO races (race_id, name, circuit, date)
+            VALUES (?, ?, ?, ?)
+        """, [race_id, f"{event} Grand Prix", session.event.Location, session.date.date()])
+
+        # Clear existing data for this race and session
+        clear_existing_data(conn, race_id, session_identifier)
 
         # Process each driver
         telemetry_data = []
@@ -140,6 +166,7 @@ def fetch_and_populate_session(year, event, session_identifier):
 
                     # Add lap time data
                     lap_times_data.append({
+                        'race_id': race_id,
                         'driver': driver,
                         'session': session_identifier,
                         'lap_number': int(lap_number),
@@ -149,6 +176,7 @@ def fetch_and_populate_session(year, event, session_identifier):
                     # Add tire data if available
                     if tire_compound and not pd.isna(tire_compound):
                         tires_data.append({
+                            'race_id': race_id,
                             'driver': driver,
                             'session': session_identifier,
                             'lap_number': int(lap_number),
@@ -172,6 +200,7 @@ def fetch_and_populate_session(year, event, session_identifier):
                                     continue
 
                                 telemetry_data.append({
+                                    'race_id': race_id,
                                     'driver': driver,
                                     'session': session_identifier,
                                     'lap_number': int(lap_number),
@@ -195,17 +224,17 @@ def fetch_and_populate_session(year, event, session_identifier):
         if lap_times_data:
             print(f"Inserting {len(lap_times_data)} lap time records...")
             lap_times_df = pd.DataFrame(lap_times_data)
-            conn.execute("INSERT INTO lap_times (driver, session, lap_number, lap_time_seconds) SELECT * FROM lap_times_df")
+            conn.execute("INSERT INTO lap_times (race_id, driver, session, lap_number, lap_time_seconds) SELECT * FROM lap_times_df")
 
         if tires_data:
             print(f"Inserting {len(tires_data)} tire records...")
             tires_df = pd.DataFrame(tires_data)
-            conn.execute("INSERT INTO tires (driver, session, lap_number, compound) SELECT * FROM tires_df")
+            conn.execute("INSERT INTO tires (race_id, driver, session, lap_number, compound) SELECT * FROM tires_df")
 
         if telemetry_data:
             print(f"Inserting {len(telemetry_data)} telemetry records...")
             telemetry_df = pd.DataFrame(telemetry_data)
-            conn.execute("INSERT INTO telemetry (driver, session, lap_number, timestamp_seconds, speed, rpm, gear, throttle) SELECT * FROM telemetry_df")
+            conn.execute("INSERT INTO telemetry (race_id, driver, session, lap_number, timestamp_seconds, speed, rpm, gear, throttle) SELECT * FROM telemetry_df")
 
         conn.close()
 
