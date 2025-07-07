@@ -1,5 +1,13 @@
 package models
 
+// Race represents a Formula 1 race event
+type Race struct {
+	ID      string `json:"race_id"`
+	Name    string `json:"name"`
+	Circuit string `json:"circuit"`
+	Date    string `json:"date"`
+}
+
 // Driver represents a Formula 1 driver.
 type Driver struct {
 	Code string `json:"code"`
@@ -8,6 +16,7 @@ type Driver struct {
 
 // Lap represents a single lap for a driver.
 type Lap struct {
+	RaceID    string  `json:"race_id"`
 	Driver    string  `json:"driver"`
 	Session   string  `json:"session"`
 	LapNumber int     `json:"lap_number"`
@@ -15,8 +24,9 @@ type Lap struct {
 	Compound  string  `json:"compound"`
 }
 
-// Telemetry represents a single telemetry data point for a lap.
+// Telemetry represents a single telemetry data point.
 type Telemetry struct {
+	RaceID           string  `json:"race_id"`
 	Driver           string  `json:"driver"`
 	Session          string  `json:"session"`
 	LapNumber        int     `json:"lap_number"`
@@ -29,6 +39,7 @@ type Telemetry struct {
 
 // Summary represents aggregate stats for a driver in a session.
 type Summary struct {
+	RaceID         string  `json:"race_id"`
 	Driver         string  `json:"driver"`
 	Session        string  `json:"session"`
 	AverageLapTime float64 `json:"average_lap_time"`

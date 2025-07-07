@@ -20,9 +20,43 @@ func NewHandler(dbProvider func() *sql.DB) *Handler {
 	return &Handler{DBProvider: dbProvider}
 }
 
+// GET /api/races
+// Returns all available races
+func (h *Handler) GetRaces(c *gin.Context) {
+	db := h.DBProvider()
+	rows, err := db.Query("SELECT race_id, name, circuit, date FROM races ORDER BY date DESC")
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to query races"})
+		return
+	}
+	defer rows.Close()
+
+	var races []models.Race
+	for rows.Next() {
+		var race models.Race
+		if err := rows.Scan(&race.ID, &race.Name, &race.Circuit, &race.Date); err != nil {
+			c.JSON(500, gin.H{"error": "Failed to scan race"})
+			return
+		}
+		races = append(races, race)
+	}
+	if err := rows.Err(); err != nil {
+		c.JSON(500, gin.H{"error": "Error reading races"})
+		return
+	}
+
+	c.JSON(200, races)
+}
+
 // GET /api/drivers
-// Returns all unique driver codes for the given session (required: ?session=Q or ?session=R)
+// Returns all unique driver codes for the given race and session
 func (h *Handler) GetDrivers(c *gin.Context) {
+	raceID := ParseRaceIDParamGin(c)
+	if raceID == "" {
+		c.JSON(400, gin.H{"error": "Missing or empty race_id parameter"})
+		return
+	}
+
 	session := ParseSessionParamGin(c)
 	if session == "" {
 		c.JSON(400, gin.H{"error": "Missing or empty session parameter"})
@@ -30,7 +64,7 @@ func (h *Handler) GetDrivers(c *gin.Context) {
 	}
 
 	db := h.DBProvider()
-	rows, err := db.Query("SELECT DISTINCT driver FROM telemetry WHERE session = ?", session)
+	rows, err := db.Query("SELECT DISTINCT driver FROM telemetry WHERE race_id = ? AND session = ?", raceID, session)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to query drivers"})
 		return
@@ -54,8 +88,14 @@ func (h *Handler) GetDrivers(c *gin.Context) {
 	c.JSON(200, drivers)
 }
 
-// GET /api/laps?drivers=VER,HAM&session=R
+// GET /api/laps?race_id=2023-austria&drivers=VER,HAM&session=R
 func (h *Handler) GetLaps(c *gin.Context) {
+	raceID := ParseRaceIDParamGin(c)
+	if raceID == "" {
+		c.JSON(400, gin.H{"error": "Missing or empty race_id parameter"})
+		return
+	}
+
 	session := ParseSessionParamGin(c)
 	if session == "" {
 		c.JSON(400, gin.H{"error": "Missing or empty session parameter"})
@@ -70,8 +110,9 @@ func (h *Handler) GetLaps(c *gin.Context) {
 
 	// Build the query with placeholders for drivers
 	placeholders := make([]string, len(drivers))
-	args := make([]interface{}, 0, len(drivers)+1)
+	args := make([]interface{}, 0, len(drivers)+2)
 
+	args = append(args, raceID)
 	for i := range drivers {
 		placeholders[i] = "?"
 		args = append(args, drivers[i])
@@ -79,10 +120,10 @@ func (h *Handler) GetLaps(c *gin.Context) {
 	args = append(args, session)
 
 	query := fmt.Sprintf(`
-		SELECT lt.driver, lt.session, lt.lap_number, lt.lap_time_seconds, COALESCE(t.compound, '') as compound
+		SELECT lt.race_id, lt.driver, lt.session, lt.lap_number, lt.lap_time_seconds, COALESCE(t.compound, '') as compound
 		FROM lap_times lt
-		LEFT JOIN tires t ON lt.driver = t.driver AND lt.session = t.session AND lt.lap_number = t.lap_number
-		WHERE lt.driver IN (%s) AND lt.session = ?
+		LEFT JOIN tires t ON lt.race_id = t.race_id AND lt.driver = t.driver AND lt.session = t.session AND lt.lap_number = t.lap_number
+		WHERE lt.race_id = ? AND lt.driver IN (%s) AND lt.session = ?
 		ORDER BY lt.driver, lt.lap_number
 	`, strings.Join(placeholders, ","))
 
@@ -98,7 +139,7 @@ func (h *Handler) GetLaps(c *gin.Context) {
 	result := make(map[string][]models.Lap)
 	for rows.Next() {
 		var lap models.Lap
-		if err := rows.Scan(&lap.Driver, &lap.Session, &lap.LapNumber, &lap.LapTime, &lap.Compound); err != nil {
+		if err := rows.Scan(&lap.RaceID, &lap.Driver, &lap.Session, &lap.LapNumber, &lap.LapTime, &lap.Compound); err != nil {
 			c.JSON(500, gin.H{"error": "Failed to scan lap data"})
 			return
 		}
@@ -117,8 +158,14 @@ func (h *Handler) GetLaps(c *gin.Context) {
 	c.JSON(200, result)
 }
 
-// GET /api/telemetry?drivers=1,44&lap_number=5&session=R
+// GET /api/telemetry?race_id=2023-austria&drivers=1,44&lap_number=5&session=R
 func (h *Handler) GetTelemetry(c *gin.Context) {
+	raceID := ParseRaceIDParamGin(c)
+	if raceID == "" {
+		c.JSON(400, gin.H{"error": "Missing or empty race_id parameter"})
+		return
+	}
+
 	session := ParseSessionParamGin(c)
 	if session == "" {
 		c.JSON(400, gin.H{"error": "Missing or empty session parameter"})
@@ -146,8 +193,9 @@ func (h *Handler) GetTelemetry(c *gin.Context) {
 
 	// Build the query with placeholders for drivers
 	placeholders := make([]string, len(drivers))
-	args := make([]interface{}, 0, len(drivers)+2)
+	args := make([]interface{}, 0, len(drivers)+3)
 
+	args = append(args, raceID)
 	for i := range drivers {
 		placeholders[i] = "?"
 		args = append(args, drivers[i])
@@ -155,9 +203,9 @@ func (h *Handler) GetTelemetry(c *gin.Context) {
 	args = append(args, session, lapNumber)
 
 	query := fmt.Sprintf(`
-		SELECT driver, session, lap_number, timestamp_seconds, speed, rpm, gear, throttle
+		SELECT race_id, driver, session, lap_number, timestamp_seconds, speed, rpm, gear, throttle
 		FROM telemetry
-		WHERE driver IN (%s) AND session = ? AND lap_number = ?
+		WHERE race_id = ? AND driver IN (%s) AND session = ? AND lap_number = ?
 		ORDER BY driver, timestamp_seconds
 	`, strings.Join(placeholders, ","))
 
@@ -173,7 +221,7 @@ func (h *Handler) GetTelemetry(c *gin.Context) {
 	result := make(map[string][]models.Telemetry)
 	for rows.Next() {
 		var telemetry models.Telemetry
-		if err := rows.Scan(&telemetry.Driver, &telemetry.Session, &telemetry.LapNumber,
+		if err := rows.Scan(&telemetry.RaceID, &telemetry.Driver, &telemetry.Session, &telemetry.LapNumber,
 			&telemetry.TimestampSeconds, &telemetry.Speed, &telemetry.RPM,
 			&telemetry.Gear, &telemetry.Throttle); err != nil {
 			c.JSON(500, gin.H{"error": "Failed to scan telemetry data"})
@@ -194,8 +242,14 @@ func (h *Handler) GetTelemetry(c *gin.Context) {
 	c.JSON(200, result)
 }
 
-// GET /api/summary?drivers=1,44&session=Q
+// GET /api/summary?race_id=2023-austria&drivers=1,44&session=Q
 func (h *Handler) GetSummary(c *gin.Context) {
+	raceID := ParseRaceIDParamGin(c)
+	if raceID == "" {
+		c.JSON(400, gin.H{"error": "Missing or empty race_id parameter"})
+		return
+	}
+
 	session := ParseSessionParamGin(c)
 	if session == "" {
 		c.JSON(400, gin.H{"error": "Missing or empty session parameter"})
@@ -210,8 +264,9 @@ func (h *Handler) GetSummary(c *gin.Context) {
 
 	// Build the query with placeholders for drivers
 	placeholders := make([]string, len(drivers))
-	args := make([]interface{}, 0, len(drivers)+1)
+	args := make([]interface{}, 0, len(drivers)+2)
 
+	args = append(args, raceID)
 	for i := range drivers {
 		placeholders[i] = "?"
 		args = append(args, drivers[i])
@@ -220,14 +275,15 @@ func (h *Handler) GetSummary(c *gin.Context) {
 
 	query := fmt.Sprintf(`
 		SELECT
+			race_id,
 			driver,
 			session,
 			AVG(lap_time_seconds) as average_lap_time,
 			MIN(lap_time_seconds) as fastest_lap_time,
 			COUNT(*) as laps_completed
 		FROM lap_times
-		WHERE driver IN (%s) AND session = ? AND lap_time_seconds > 0
-		GROUP BY driver, session
+		WHERE race_id = ? AND driver IN (%s) AND session = ? AND lap_time_seconds > 0
+		GROUP BY race_id, driver, session
 		ORDER BY driver
 	`, strings.Join(placeholders, ","))
 
@@ -243,7 +299,7 @@ func (h *Handler) GetSummary(c *gin.Context) {
 	result := make(map[string]models.Summary)
 	for rows.Next() {
 		var summary models.Summary
-		if err := rows.Scan(&summary.Driver, &summary.Session, &summary.AverageLapTime,
+		if err := rows.Scan(&summary.RaceID, &summary.Driver, &summary.Session, &summary.AverageLapTime,
 			&summary.FastestLapTime, &summary.LapsCompleted); err != nil {
 			c.JSON(500, gin.H{"error": "Failed to scan summary data"})
 			return
@@ -278,10 +334,16 @@ func ParseSessionParamGin(c *gin.Context) string {
 	return strings.TrimSpace(c.Query("session"))
 }
 
+// Utility: Parse race_id param from Gin context
+func ParseRaceIDParamGin(c *gin.Context) string {
+	return strings.TrimSpace(c.Query("race_id"))
+}
+
 // RegisterRoutesGin attaches handlers to the Gin router
 func RegisterRoutesGin(r *gin.Engine, handler *Handler) {
 	api := r.Group("/api")
 	{
+		api.GET("/races", handler.GetRaces)
 		api.GET("/drivers", handler.GetDrivers)
 		api.GET("/laps", handler.GetLaps)
 		api.GET("/telemetry", handler.GetTelemetry)
