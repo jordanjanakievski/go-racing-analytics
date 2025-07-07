@@ -142,7 +142,11 @@ class F1Dashboard {
                 this.state.selectedRace,
                 this.state.session,
             );
-            this.populateDriverSelect(drivers);
+            // Sort drivers by number in ascending order
+            const sortedDrivers = drivers.sort(
+                (a, b) => parseInt(a) - parseInt(b),
+            );
+            this.populateDriverSelect(sortedDrivers);
         } catch (error) {
             console.error("Failed to load drivers:", error);
             this.showError("Failed to load drivers");
@@ -518,6 +522,7 @@ class F1Dashboard {
         if (this.state.selectedDrivers.length === 0) return;
 
         getTelemetry(
+            this.state.selectedRace,
             this.state.selectedDrivers,
             this.state.selectedLap,
             this.state.session,
