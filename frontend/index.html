@@ -20,6 +20,16 @@
 
         <div class="controls">
             <div class="control-group">
+                <label for="race-select">Race:</label>
+                <div class="race-select-container">
+                    <select id="race-select">
+                        <option value="">Loading races...</option>
+                    </select>
+                    <div class="driver-help">Select a race to analyze</div>
+                </div>
+            </div>
+
+            <div class="control-group">
                 <label>Session:</label>
                 <div class="session-bubbles">
                     <input
@@ -109,6 +119,7 @@
 
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
         <script type="module" src="/src/main.ts"></script>
     </body>
 </html>

@@ -7,12 +7,14 @@ import type {
     LapsResponse,
     TelemetryResponse,
     SummaryResponse,
+    Race,
 } from "./types";
 import {
     getDrivers,
     getLaps,
     getTelemetry,
     getSummary,
+    getRaces,
     checkApiHealth,
     getDriverDisplayName,
     ApiError,
@@ -28,6 +30,7 @@ import {
 
 class F1Dashboard {
     private state: DashboardState = {
+        selectedRace: "",
         session: "R",
         selectedDrivers: [],
         selectedLap: 1,
@@ -43,6 +46,17 @@ class F1Dashboard {
     }
 
     private initializeEventListeners(): void {
+        // Race selector
+        const raceSelect = document.getElementById(
+            "race-select",
+        ) as HTMLSelectElement;
+        if (raceSelect) {
+            raceSelect.addEventListener("change", (e) => {
+                this.state.selectedRace = (e.target as HTMLSelectElement).value;
+                this.loadDrivers();
+            });
+        }
+
         // Session selector (radio buttons)
         const sessionInputs = document.querySelectorAll(
             'input[name="session"]',
@@ -97,9 +111,16 @@ class F1Dashboard {
                 );
             }
 
-            // Load initial drivers
-            await this.loadDrivers();
+            // Load races into race selector
+            const raceSelect = document.getElementById(
+                "race-select",
+            ) as HTMLSelectElement;
+            if (raceSelect) {
+                const races = await getRaces();
+                this.populateRaceSelect(races);
+            }
 
+            // Don't load drivers until a race is selected
             this.hideLoading();
         } catch (error) {
             this.showError(
@@ -112,12 +133,43 @@ class F1Dashboard {
 
     private async loadDrivers(): Promise<void> {
         try {
-            const drivers = await getDrivers(this.state.session);
+            if (!this.state.selectedRace) {
+                // Clear the driver select if no race is selected
+                this.populateDriverSelect([]);
+                return;
+            }
+            const drivers = await getDrivers(
+                this.state.selectedRace,
+                this.state.session,
+            );
             this.populateDriverSelect(drivers);
         } catch (error) {
             console.error("Failed to load drivers:", error);
             this.showError("Failed to load drivers");
         }
+    }
+
+    private populateRaceSelect(races: Race[]): void {
+        const raceSelect = document.getElementById(
+            "race-select",
+        ) as HTMLSelectElement;
+        raceSelect.innerHTML = "";
+
+        // Add placeholder option
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Choose a race...";
+        placeholder.disabled = true;
+        placeholder.selected = true;
+        raceSelect.appendChild(placeholder);
+
+        // Add race options
+        races.forEach((race) => {
+            const option = document.createElement("option");
+            option.value = race.race_id;
+            option.textContent = `${race.name} (${race.circuit})`;
+            raceSelect.appendChild(option);
+        });
     }
 
     private populateDriverSelect(drivers: string[]): void {
@@ -176,6 +228,10 @@ class F1Dashboard {
     }
 
     private async loadDashboardData(): Promise<void> {
+        if (!this.state.selectedRace) {
+            this.showError("Please select a race");
+            return;
+        }
         if (this.state.selectedDrivers.length === 0) {
             this.showError("Please select at least one driver");
             return;
@@ -186,14 +242,27 @@ class F1Dashboard {
 
         try {
             // Load all data in parallel
+            if (!this.state.selectedRace) {
+                throw new Error("Please select a race first");
+            }
+
             const [lapsData, telemetryData, summaryData] = await Promise.all([
-                getLaps(this.state.selectedDrivers, this.state.session),
+                getLaps(
+                    this.state.selectedRace,
+                    this.state.selectedDrivers,
+                    this.state.session,
+                ),
                 getTelemetry(
+                    this.state.selectedRace,
                     this.state.selectedDrivers,
                     this.state.selectedLap,
                     this.state.session,
                 ),
-                getSummary(this.state.selectedDrivers, this.state.session),
+                getSummary(
+                    this.state.selectedRace,
+                    this.state.selectedDrivers,
+                    this.state.session,
+                ),
             ]);
 
             // Update lap selector with available laps

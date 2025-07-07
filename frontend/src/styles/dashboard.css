@@ -99,6 +99,16 @@ body {
     padding: 0.5rem;
 }
 
+/* Race Selection */
+.race-select-container {
+    position: relative;
+}
+
+.race-select-container select {
+    width: 250px;
+    padding: 0.5rem;
+}
+
 .driver-help {
     font-size: 0.75rem;
     color: #6c757d;
