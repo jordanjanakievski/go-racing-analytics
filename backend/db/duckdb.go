@@ -1,4 +1,3 @@
-go-racing-analytics/backend/db/duckdb.go
 package db
 
 import (

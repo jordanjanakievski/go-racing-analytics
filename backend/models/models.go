@@ -1,7 +1,4 @@
-go-racing-analytics/backend/models/models.go
 package models
-
-import "time"
 
 // Driver represents a Formula 1 driver.
 type Driver struct {
@@ -11,23 +8,23 @@ type Driver struct {
 
 // Lap represents a single lap for a driver.
 type Lap struct {
-	Driver      string  `json:"driver"`
-	Session     string  `json:"session"`
-	LapNumber   int     `json:"lap_number"`
-	LapTime     float64 `json:"lap_time_seconds"`
-	Compound    string  `json:"compound"`
+	Driver    string  `json:"driver"`
+	Session   string  `json:"session"`
+	LapNumber int     `json:"lap_number"`
+	LapTime   float64 `json:"lap_time_seconds"`
+	Compound  string  `json:"compound"`
 }
 
 // Telemetry represents a single telemetry data point for a lap.
 type Telemetry struct {
-	Driver    string    `json:"driver"`
-	Session   string    `json:"session"`
-	LapNumber int       `json:"lap_number"`
-	Timestamp time.Time `json:"timestamp"`
-	Speed     float64   `json:"speed"`
-	RPM       float64   `json:"rpm"`
-	Gear      int       `json:"gear"`
-	Throttle  float64   `json:"throttle"`
+	Driver           string  `json:"driver"`
+	Session          string  `json:"session"`
+	LapNumber        int     `json:"lap_number"`
+	TimestampSeconds float64 `json:"timestamp_seconds"`
+	Speed            float64 `json:"speed"`
+	RPM              float64 `json:"rpm"`
+	Gear             int     `json:"gear"`
+	Throttle         float64 `json:"throttle"`
 }
 
 // Summary represents aggregate stats for a driver in a session.

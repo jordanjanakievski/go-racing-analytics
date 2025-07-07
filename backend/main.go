@@ -1,12 +1,11 @@
-go-racing-analytics/backend/main.go
 package main
 
 import (
 	"log"
 	"os"
 
-	"github.com/gin-gonic/gin"
 	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 
 	"go-racing-analytics/backend/db"
 	"go-racing-analytics/backend/handlers"

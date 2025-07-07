@@ -1,38 +1,22 @@
-go-racing-analytics/backend/handlers/handlers.go
 package handlers
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"go-racing-analytics/backend/models"
+
+	"github.com/gin-gonic/gin"
 )
 
 // Handler struct holds dependencies for HTTP handlers
 type Handler struct {
-	DBProvider func() DB
-}
-
-// DB interface allows for easier testing/mocking
-type DB interface {
-	Query(query string, args ...interface{}) (Rows, error)
-	QueryRow(query string, args ...interface{}) Row
-}
-
-// Rows and Row interfaces for DB abstraction
-type Rows interface {
-	Next() bool
-	Scan(dest ...interface{}) error
-	Close() error
-	Err() error
-}
-type Row interface {
-	Scan(dest ...interface{}) error
+	DBProvider func() *sql.DB
 }
 
 // NewHandler returns a Handler with the given DB provider
-func NewHandler(dbProvider func() DB) *Handler {
+func NewHandler(dbProvider func() *sql.DB) *Handler {
 	return &Handler{DBProvider: dbProvider}
 }
 
@@ -133,16 +117,147 @@ func (h *Handler) GetLaps(c *gin.Context) {
 	c.JSON(200, result)
 }
 
-// GET /api/telemetry?drivers=VER,HAM&lap_number=5&session=R
+// GET /api/telemetry?drivers=1,44&lap_number=5&session=R
 func (h *Handler) GetTelemetry(c *gin.Context) {
-	// TODO: Parse drivers, lap_number, session, fetch telemetry from DuckDB
-	c.JSON(501, gin.H{"error": "Not implemented"})
+	session := ParseSessionParamGin(c)
+	if session == "" {
+		c.JSON(400, gin.H{"error": "Missing or empty session parameter"})
+		return
+	}
+
+	drivers := ParseDriversParamGin(c)
+	if len(drivers) == 0 {
+		c.JSON(400, gin.H{"error": "Missing or empty drivers parameter"})
+		return
+	}
+
+	lapNumberStr := c.Query("lap_number")
+	if lapNumberStr == "" {
+		c.JSON(400, gin.H{"error": "Missing lap_number parameter"})
+		return
+	}
+
+	// Convert lap_number to int
+	var lapNumber int
+	if _, err := fmt.Sscanf(lapNumberStr, "%d", &lapNumber); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid lap_number parameter"})
+		return
+	}
+
+	// Build the query with placeholders for drivers
+	placeholders := make([]string, len(drivers))
+	args := make([]interface{}, 0, len(drivers)+2)
+
+	for i := range drivers {
+		placeholders[i] = "?"
+		args = append(args, drivers[i])
+	}
+	args = append(args, session, lapNumber)
+
+	query := fmt.Sprintf(`
+		SELECT driver, session, lap_number, timestamp_seconds, speed, rpm, gear, throttle
+		FROM telemetry
+		WHERE driver IN (%s) AND session = ? AND lap_number = ?
+		ORDER BY driver, timestamp_seconds
+	`, strings.Join(placeholders, ","))
+
+	db := h.DBProvider()
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to query telemetry data"})
+		return
+	}
+	defer rows.Close()
+
+	// Group telemetry by driver
+	result := make(map[string][]models.Telemetry)
+	for rows.Next() {
+		var telemetry models.Telemetry
+		if err := rows.Scan(&telemetry.Driver, &telemetry.Session, &telemetry.LapNumber,
+			&telemetry.TimestampSeconds, &telemetry.Speed, &telemetry.RPM,
+			&telemetry.Gear, &telemetry.Throttle); err != nil {
+			c.JSON(500, gin.H{"error": "Failed to scan telemetry data"})
+			return
+		}
+
+		if result[telemetry.Driver] == nil {
+			result[telemetry.Driver] = make([]models.Telemetry, 0)
+		}
+		result[telemetry.Driver] = append(result[telemetry.Driver], telemetry)
+	}
+
+	if err := rows.Err(); err != nil {
+		c.JSON(500, gin.H{"error": "Error reading telemetry data"})
+		return
+	}
+
+	c.JSON(200, result)
 }
 
-// GET /api/summary?drivers=VER,HAM&session=Q
+// GET /api/summary?drivers=1,44&session=Q
 func (h *Handler) GetSummary(c *gin.Context) {
-	// TODO: Parse drivers and session, fetch summary stats from DuckDB
-	c.JSON(501, gin.H{"error": "Not implemented"})
+	session := ParseSessionParamGin(c)
+	if session == "" {
+		c.JSON(400, gin.H{"error": "Missing or empty session parameter"})
+		return
+	}
+
+	drivers := ParseDriversParamGin(c)
+	if len(drivers) == 0 {
+		c.JSON(400, gin.H{"error": "Missing or empty drivers parameter"})
+		return
+	}
+
+	// Build the query with placeholders for drivers
+	placeholders := make([]string, len(drivers))
+	args := make([]interface{}, 0, len(drivers)+1)
+
+	for i := range drivers {
+		placeholders[i] = "?"
+		args = append(args, drivers[i])
+	}
+	args = append(args, session)
+
+	query := fmt.Sprintf(`
+		SELECT
+			driver,
+			session,
+			AVG(lap_time_seconds) as average_lap_time,
+			MIN(lap_time_seconds) as fastest_lap_time,
+			COUNT(*) as laps_completed
+		FROM lap_times
+		WHERE driver IN (%s) AND session = ? AND lap_time_seconds > 0
+		GROUP BY driver, session
+		ORDER BY driver
+	`, strings.Join(placeholders, ","))
+
+	db := h.DBProvider()
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to query summary data"})
+		return
+	}
+	defer rows.Close()
+
+	// Group summary by driver
+	result := make(map[string]models.Summary)
+	for rows.Next() {
+		var summary models.Summary
+		if err := rows.Scan(&summary.Driver, &summary.Session, &summary.AverageLapTime,
+			&summary.FastestLapTime, &summary.LapsCompleted); err != nil {
+			c.JSON(500, gin.H{"error": "Failed to scan summary data"})
+			return
+		}
+
+		result[summary.Driver] = summary
+	}
+
+	if err := rows.Err(); err != nil {
+		c.JSON(500, gin.H{"error": "Error reading summary data"})
+		return
+	}
+
+	c.JSON(200, result)
 }
 
 // Utility: Parse comma-separated drivers from Gin context
