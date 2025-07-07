@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Go Racing Analytics Dashboard</title>
+        <link rel="stylesheet" href="/src/styles/dashboard.css" />
+    </head>
+    <body>
+        <div class="header">
+            <div class="header-content">
+                <img
+                    src="assets/racing-gopher.png"
+                    alt="Racing Gopher"
+                    class="racing-gopher"
+                />
+                <h1>Go Racing Analytics</h1>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label>Session:</label>
+                <div class="session-bubbles">
+                    <input
+                        type="radio"
+                        id="session-race"
+                        name="session"
+                        value="R"
+                        checked
+                    />
+                    <label for="session-race" class="bubble-label"
+                        >🏁 Race</label
+                    >
+                    <input
+                        type="radio"
+                        id="session-qualifying"
+                        name="session"
+                        value="Q"
+                    />
+                    <label for="session-qualifying" class="bubble-label"
+                        >⏱️ Qualifying</label
+                    >
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label for="driver-select">Drivers:</label>
+                <div class="driver-select-container">
+                    <select id="driver-select" multiple size="4">
+                        <option value="">Loading drivers...</option>
+                    </select>
+                    <div class="driver-help">
+                        Hold Ctrl/Cmd to select multiple drivers
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label for="lap-select">Telemetry Lap:</label>
+                <select
+                    id="lap-select"
+                    title="Select which lap to show telemetry data for"
+                >
+                    <option value="1">Lap 1</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>&nbsp;</label>
+                <button class="btn" id="load-data-btn">Load Data</button>
+            </div>
+        </div>
+
+        <div class="dashboard">
+            <!-- Lap Times Chart -->
+            <div class="chart-container">
+                <h3>Lap Times Comparison</h3>
+                <div class="driver-legend" id="lap-times-legend"></div>
+                <div class="chart-wrapper">
+                    <canvas id="lap-times-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Telemetry Chart -->
+            <div class="chart-container">
+                <h3>Telemetry Data</h3>
+                <div class="driver-legend" id="telemetry-legend"></div>
+                <div class="chart-wrapper">
+                    <canvas id="telemetry-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Summary Stats -->
+            <div class="chart-container full-width">
+                <h3>Driver Summary Statistics</h3>
+                <div class="stats-grid" id="summary-stats"></div>
+            </div>
+
+            <!-- Tire Strategy Chart -->
+            <div class="chart-container full-width">
+                <h3>Tire Strategy</h3>
+                <div class="driver-legend" id="tire-legend"></div>
+                <div class="chart-wrapper">
+                    <canvas id="tire-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+        <script type="module" src="/src/main.ts"></script>
+    </body>
+</html>
