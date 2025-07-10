@@ -66,6 +66,16 @@ It uses the FastF1 package to gather data.
 
 8. Open your browser and navigate to `http://localhost:3000` to view the application.
 
+or
+
+### Docker Setup
+
+1. Run the docker compose command to build and start the application:
+
+    ```bash
+    docker compose up --build
+    ```
+
 ## Adding New Data
 
 To add new data to the application, follow these steps:

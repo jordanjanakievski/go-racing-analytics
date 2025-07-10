@@ -1,0 +1,19 @@
+services:
+    backend:
+        image: golang:1.24
+        working_dir: /app
+        volumes:
+            - ./backend:/app
+            - ./duckdb:/duckdb
+        command: go run main.go
+        ports:
+            - "8080:8080"
+
+    frontend:
+        image: oven/bun:1.2
+        working_dir: /app
+        volumes:
+            - ./frontend:/app
+        command: sh -c "bun install && bun dev"
+        ports:
+            - "3000:3000"
