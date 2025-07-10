@@ -23,7 +23,7 @@ It uses the FastF1 package to gather data.
 
 ### Prerequisites
 
-- Node.js (v16 or later)
+- Node.js (v16 or later) or Bun (v1.2 or later)
 - Python (v3.8 or later)
 - Go (v1.22 or later)
 
