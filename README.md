@@ -8,6 +8,10 @@ This project is an ETL pipeline and web application dashboard designed to analyz
 
 It uses the FastF1 package to gather data.
 
+<p align="center">
+    <img src="./docs/assets/dashboard.gif" alt="Go Racing Analytics Dashboard" width="750"/>
+</p>
+
 ## Features
 
 - **Overall Lap Times**: View and compare lap times across different drivers
@@ -66,8 +70,6 @@ It uses the FastF1 package to gather data.
 
 8. Open your browser and navigate to `http://localhost:3000` to view the application.
 
-or
-
 ### Docker Setup
 
 1. Run the docker compose command to build and start the application:
@@ -84,3 +86,5 @@ To add new data to the application, follow these steps:
 python fetch_and_populate.py --year XXXX --event LOCATION --session R
 python fetch_and_populate.py --year XXXX --event LOCATION --session Q
 ```
+
+Familiarize yourself with [FastF1](https://docs.fastf1.dev/) for details on how to specify the year and event.
